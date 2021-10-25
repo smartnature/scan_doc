@@ -61,6 +61,44 @@ class ImageFitter:
         self.img = cv2.imread(img)
 
 
+    def Crop(self, save_cropped=False):
+        print("Croping")
+        # read the original image, copy it,
+        # rotate it
+        image = self.img
+        orig = image.copy()
+        
+        imageGrayscale = cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
+        im_bw_245 = cv2.threshold(imageGrayscale, 245, 255, cv2.THRESH_BINARY)[1]
+
+        img_edges_160000_160000_7 = cv2.Canny(im_bw_245, 160000, 160000, apertureSize=7)  
+        lines = cv2.HoughLinesP(img_edges_160000_160000_7, rho=1, theta=np.pi / 180.0, threshold=160, minLineLength=100, maxLineGap=10)
+        
+        imageWithLines = image.copy()
+        orthoLines = []
+        for [[x1, y1, x2, y2]] in lines:
+            angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
+            angle_45 = angle%90
+            if angle_45 > 45:
+                angle_45-=90
+            if (angle_45>-1 and angle_45 < 1):
+                orthoLines.append([x1, y1, x2, y2])
+                cv2.line(imageWithLines, (x1, y1), (x2, y2), (128,0,0), 10)
+
+        #cv2.imshow("imageWithLines", ResizeWithAspectRatio(imageWithLines,1000))
+        #cv2.waitKey(0)
+
+        for x1, y1, x2, y2 in orthoLines:
+            angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
+            print("Angle: " + str(angle))
+
+        if save_cropped:
+            destFileName = splitext(self.filename)[0] + '_cropped.png'
+            # Saving an image itself
+            cv2.imwrite(destFileName, image)
+
+        self.img = image
+        return image
 
 
     def Rotation(self, save_rotated=False):
@@ -130,6 +168,8 @@ class ImageFitter:
             destFileName = splitext(self.filename)[0] + '_rotated.png'
             # Saving an image itself
             cv2.imwrite(destFileName, image)
+
+        self.img = image
         return image
 
 
@@ -148,4 +188,5 @@ if __name__=="__main__":
         print(imgPath)
         fitter = ImageFitter(imgPath)
         rotated_im = fitter.Rotation(save_rotated=True)
+        cropped_im = fitter.Crop(save_cropped=False)
     
