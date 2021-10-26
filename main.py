@@ -6,6 +6,7 @@ from scipy import ndimage
 from os import listdir
 from os.path import isfile, join, splitext
 import pathlib
+from itertools import chain
 
 print("Imports are Done!")
 
@@ -68,29 +69,36 @@ class ImageFitter:
         image = self.img
         orig = image.copy()
         
-        imageGrayscale = cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
+        blur = cv2.blur(orig,(15,15))
+        imageGrayscale = cv2.cvtColor(blur, cv2.COLOR_BGR2GRAY)
         im_bw_245 = cv2.threshold(imageGrayscale, 245, 255, cv2.THRESH_BINARY)[1]
 
         img_edges_160000_160000_7 = cv2.Canny(im_bw_245, 160000, 160000, apertureSize=7)  
-        lines = cv2.HoughLinesP(img_edges_160000_160000_7, rho=1, theta=np.pi / 180.0, threshold=160, minLineLength=100, maxLineGap=10)
         
-        imageWithLines = image.copy()
-        orthoLines = []
-        for [[x1, y1, x2, y2]] in lines:
-            angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
-            angle_45 = angle%90
-            if angle_45 > 45:
-                angle_45-=90
-            if (angle_45>-1 and angle_45 < 1):
-                orthoLines.append([x1, y1, x2, y2])
-                cv2.line(imageWithLines, (x1, y1), (x2, y2), (128,0,0), 10)
-
-        #cv2.imshow("imageWithLines", ResizeWithAspectRatio(imageWithLines,1000))
+        #cv2.imshow("im_bw_245", ResizeWithAspectRatio(im_bw_245,1000))
+        #cv2.imshow("img_edges_160000_160000_7", ResizeWithAspectRatio(img_edges_160000_160000_7,1000))
         #cv2.waitKey(0)
 
-        for x1, y1, x2, y2 in orthoLines:
-            angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
-            print("Angle: " + str(angle))
+        contours, hierarchy = cv2.findContours(img_edges_160000_160000_7, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        imageWithContours = image.copy()
+        #cv2.drawContours(image=imageWithContours, contours=contours, contourIdx=-1, color=(0, 255, 0), thickness=10, lineType=cv2.LINE_AA)
+        #cv2.drawContours(imageWithContours, contours, -1, (0, 255, 0), 3)
+        #cv2.imshow("imageWithContours", ResizeWithAspectRatio(imageWithContours,1000))
+        #cv2.waitKey(0)
+
+        #merga all contours into one
+        list_of_pts = [] 
+        for ctr in contours:
+            list_of_pts += [pt[0] for pt in ctr]
+        x,y,w,h = cv2.boundingRect(cv2.convexHull(np.array(list_of_pts).reshape((-1,1,2)).astype(np.int32)))
+
+        #imageWithContours = image.copy()
+        #cv2.rectangle(imageWithContours, (x,y), (x+w, y+h), (0, 255, 0), 10)
+        #cv2.imshow("imageWithContours", ResizeWithAspectRatio(imageWithContours,1000))
+        #cv2.waitKey(0)
+
+        image = image[y:y+h,x:x+w]
 
         if save_cropped:
             destFileName = splitext(self.filename)[0] + '_cropped.png'
@@ -162,7 +170,7 @@ class ImageFitter:
             maxAngle -= 90
         print("Rotation Angle: " + str(maxAngle))
         # actual rotation
-        image = ndimage.rotate(image, maxAngle)
+        image = ndimage.rotate(image, maxAngle, cval=255)
 
         if save_rotated:
             destFileName = splitext(self.filename)[0] + '_rotated.png'
@@ -187,6 +195,6 @@ if __name__=="__main__":
     for imgPath in files:
         print(imgPath)
         fitter = ImageFitter(imgPath)
-        rotated_im = fitter.Rotation(save_rotated=True)
-        cropped_im = fitter.Crop(save_cropped=False)
+        rotated_im = fitter.Rotation(save_rotated=False)
+        cropped_im = fitter.Crop(save_cropped=True)
     
